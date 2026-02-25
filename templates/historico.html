@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SysPetro - Historico</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --line:#334155; --text:#e5e7eb; --accent:#1d4ed8; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; font-family:Segoe UI, sans-serif; color:var(--text);
+      background: radial-gradient(circle at 15% 10%, rgba(180,83,9,.2), transparent 35%), linear-gradient(135deg, #020617, var(--bg));
+      padding:16px; }
+    .wrap { max-width:980px; margin:0 auto; }
+    .bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:10px; }
+    .brand { font-size:26px; margin:0; }
+    .sub { margin:2px 0 0; color:#cbd5e1; font-size:14px; }
+    .btn { border:1px solid var(--line); background:transparent; color:white; border-radius:10px; padding:8px 12px; text-decoration:none; display:inline-flex; align-items:center; gap:8px; }
+    .card { background:rgba(17,24,39,.9); border:1px solid var(--line); border-radius:16px; padding:18px; }
+    .tabs { display:flex; gap:8px; margin-bottom:10px; }
+    .tab { width:auto; padding:8px 12px; background:transparent; border:1px solid var(--line); border-radius:10px; color:#cbd5e1; cursor:pointer; }
+    .tab.active { background:var(--accent); color:white; border-color:#2563eb; }
+    .panel.hidden { display:none; }
+    .groups { display:grid; gap:10px; }
+    .folder { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:rgba(11,18,32,.65); }
+    .folder > summary { list-style:none; cursor:pointer; padding:10px 12px; border-bottom:1px solid #233047; display:flex; align-items:center; gap:8px; font-weight:700; color:#cbd5e1; }
+    .folder > summary::-webkit-details-marker { display:none; }
+    .folder-icon { width:16px; height:12px; display:inline-block; border:1px solid #94a3b8; border-radius:2px; position:relative; background:#1e293b; }
+    .folder-icon::before { content:""; position:absolute; top:-4px; left:1px; width:8px; height:4px; border:1px solid #94a3b8; border-bottom:none; border-radius:2px 2px 0 0; background:#334155; }
+    .table-wrap { overflow:auto; }
+    table { width:100%; border-collapse:collapse; min-width:1080px; }
+    th, td { padding:9px 10px; border-bottom:1px solid #233047; text-align:left; font-size:13px; }
+    th { color:#93c5fd; background:#0b1220; }
+    .status-ok { color:#86efac; font-weight:700; }
+    .status-erro { color:#fca5a5; font-weight:700; }
+    .btn-del { border:1px solid #7f1d1d; background:#3f1010; color:#fecaca; border-radius:8px; padding:6px 8px; font-size:12px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="bar">
+      <div>
+        <h1 class="brand">Historico de Movimentacoes</h1>
+        <p class="sub">Operador: {{ user_name }}</p>
+      </div>
+      <a class="btn" href="{{ url_for('home') }}">Voltar</a>
+    </header>
+
+    <section class="card">
+      <div class="tabs">
+        <button id="tab-hoje" class="tab active" type="button">Hoje</button>
+        <button id="tab-salvos" class="tab" type="button">Salvos</button>
+      </div>
+      <div id="panel-hoje" class="panel groups"></div>
+      <div id="panel-salvos" class="panel groups hidden"></div>
+    </section>
+  </div>
+
+<script>
+  const panelHoje = document.getElementById("panel-hoje");
+  const panelSalvos = document.getElementById("panel-salvos");
+  const tabHoje = document.getElementById("tab-hoje");
+  const tabSalvos = document.getElementById("tab-salvos");
+
+  function getLocalISODate() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function formatDateBR(isoDate) {
+    if (!isoDate || typeof isoDate !== "string") return "";
+    const m = isoDate.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : isoDate;
+  }
+
+  function buildTable(registros) {
+    const wrap = document.createElement("div");
+    wrap.className = "table-wrap";
+    const table = document.createElement("table");
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Data</th><th>Hora</th><th>Campo</th><th>Tanque</th><th>Medida</th><th>SIT</th>
+          <th>Operador</th><th>Status</th><th>Obs.</th><th>Lixeira</th>
+        </tr>
+      </thead>
+    `;
+    const tbody = document.createElement("tbody");
+    registros.forEach((item) => {
+      const tr = document.createElement("tr");
+      const medida = Number(item.medida);
+      const statusClass = item.status_envio === "enviado" ? "status-ok" : "status-erro";
+      const statusText = item.status_envio === "enviado" ? "Enviado" : "Erro";
+      const cols = [
+        item.data_medicao || "", item.hora || "", item.campo_nome || "", item.tanque_nome || "",
+        Number.isFinite(medida) ? medida.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
+        item.situacao || "", item.operador || "", statusText, item.observacao || item.erro_envio || ""
+      ];
+      cols.forEach((v, i) => {
+        const td = document.createElement("td");
+        td.textContent = v;
+        if (i === 7) td.className = statusClass;
+        tr.appendChild(td);
+      });
+      const actionTd = document.createElement("td");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-del";
+      btn.textContent = "Excluir";
+      btn.dataset.id = String(item.id || "");
+      actionTd.appendChild(btn);
+      tr.appendChild(actionTd);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  function renderEmpty(container, text) {
+    container.innerHTML = `<div class="sub">${text}</div>`;
+  }
+
+  function renderSalvos(registros) {
+    panelSalvos.innerHTML = "";
+    if (!registros.length) return renderEmpty(panelSalvos, "Sem medicoes salvas.");
+    const groups = new Map();
+    registros.forEach((r) => {
+      const k = r.boletim_data_ref || "sem-data";
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    });
+    groups.forEach((items, boletimRef) => {
+      const details = document.createElement("details");
+      details.className = "folder";
+      details.open = true;
+      const summary = document.createElement("summary");
+      summary.innerHTML = `<span class="folder-icon" aria-hidden="true"></span><span>Historico de movimentacoes - ${formatDateBR(boletimRef)}</span>`;
+      details.appendChild(summary);
+      details.appendChild(buildTable(items));
+      panelSalvos.appendChild(details);
+    });
+  }
+
+  function renderHoje(registros) {
+    panelHoje.innerHTML = "";
+    if (!registros.length) return renderEmpty(panelHoje, "Sem medicoes de hoje.");
+    panelHoje.appendChild(buildTable(registros));
+  }
+
+  function switchTab(tab) {
+    const isHoje = tab === "hoje";
+    tabHoje.classList.toggle("active", isHoje);
+    tabSalvos.classList.toggle("active", !isHoje);
+    panelHoje.classList.toggle("hidden", !isHoje);
+    panelSalvos.classList.toggle("hidden", isHoje);
+  }
+
+  async function loadHistorico() {
+    const resp = await fetch("/api/historico?limit=500");
+    const data = await resp.json();
+    const today = getLocalISODate();
+    const hoje = data.filter((r) => (r.data_medicao || "") === today);
+    const salvos = data.filter((r) => (r.data_medicao || "") !== today);
+    renderHoje(hoje);
+    renderSalvos(salvos);
+  }
+
+  async function deleteHistorico(id) {
+    const resp = await fetch(`/api/historico/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!resp.ok) throw new Error("Falha ao excluir");
+  }
+
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button.btn-del");
+    if (!btn) return;
+    if (!confirm("Deseja excluir esta manobra do historico?")) return;
+    await deleteHistorico(btn.dataset.id);
+    await loadHistorico();
+  });
+
+  tabHoje.addEventListener("click", () => switchTab("hoje"));
+  tabSalvos.addEventListener("click", () => switchTab("salvos"));
+  switchTab("hoje");
+  loadHistorico();
+</script>
+</body>
+</html>

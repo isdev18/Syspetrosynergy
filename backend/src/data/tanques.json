@@ -1,0 +1,26 @@
+[
+  {
+    "campo_id": "campo_ba_01",
+    "campo_nome": "Campo Bahia Norte",
+    "tanque_id": "tnk_001",
+    "tanque_nome": "Tanque 001",
+    "sheet_tab": "Tanque 001",
+    "sheet_key": "TNK001"
+  },
+  {
+    "campo_id": "campo_ba_01",
+    "campo_nome": "Campo Bahia Norte",
+    "tanque_id": "tnk_002",
+    "tanque_nome": "Tanque 002",
+    "sheet_tab": "Tanque 002",
+    "sheet_key": "TNK002"
+  },
+  {
+    "campo_id": "campo_ba_02",
+    "campo_nome": "Campo Bahia Sul",
+    "tanque_id": "tnk_003",
+    "tanque_nome": "Tanque 003",
+    "sheet_tab": "Tanque 003",
+    "sheet_key": "TNK003"
+  }
+]

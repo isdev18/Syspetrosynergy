@@ -1,0 +1,290 @@
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SysPetro - Dashboard</title>
+  <style>
+    :root {
+      --bg:#071127;
+      --panel:#0f1b33;
+      --line:#29415e;
+      --text:#e6edf8;
+      --muted:#9bb0c9;
+      --ok:#34d399;
+      --warn:#fbbf24;
+      --err:#f87171;
+      --accent:#60a5fa;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0;
+      min-height:100vh;
+      font-family:Segoe UI, sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(96,165,250,.2), transparent 32%),
+        radial-gradient(circle at 90% 90%, rgba(52,211,153,.16), transparent 28%),
+        linear-gradient(145deg, #020617, var(--bg));
+      padding:16px;
+    }
+    .wrap { max-width:1200px; margin:0 auto; }
+    .top {
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-bottom:14px;
+    }
+    .title { margin:0; font-size:28px; }
+    .sub { margin:4px 0 0; color:var(--muted); font-size:14px; }
+    .actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .btn {
+      border:1px solid var(--line);
+      background:rgba(15,27,51,.8);
+      color:#fff;
+      border-radius:10px;
+      padding:8px 12px;
+      text-decoration:none;
+      cursor:pointer;
+    }
+    .legend { display:flex; gap:10px; align-items:center; color:var(--muted); font-size:13px; }
+    .dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
+    .dot.ok { background:var(--ok); }
+    .dot.warn { background:var(--warn); }
+    .dot.err { background:var(--err); }
+    .field {
+      margin-top:14px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:rgba(15,27,51,.82);
+      overflow:hidden;
+    }
+    .field-head {
+      padding:10px 12px;
+      border-bottom:1px solid #1f324a;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .field-name { margin:0; font-size:18px; }
+    .tanks {
+      padding:12px;
+      display:grid;
+      gap:10px;
+      grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .tank-card {
+      border:1px solid #213750;
+      border-radius:12px;
+      background:linear-gradient(180deg, rgba(11,20,38,.95), rgba(7,15,31,.95));
+      padding:10px;
+      display:grid;
+      gap:8px;
+    }
+    .tank-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .tank-name { margin:0; font-size:16px; }
+    .pill {
+      border:1px solid #355172;
+      border-radius:999px;
+      font-size:12px;
+      padding:4px 8px;
+      color:#dbeafe;
+      background:#10233f;
+      white-space:nowrap;
+    }
+    .pill.ok { border-color:#14532d; background:#052e1f; color:#86efac; }
+    .pill.warn { border-color:#78350f; background:#451a03; color:#fcd34d; }
+    .pill.err { border-color:#7f1d1d; background:#3f1010; color:#fca5a5; }
+    .tank-grid { display:grid; grid-template-columns:86px 1fr; gap:10px; align-items:center; }
+    .tank-vis {
+      height:118px;
+      border:2px solid #355172;
+      border-radius:8px 8px 18px 18px;
+      position:relative;
+      overflow:hidden;
+      background:linear-gradient(180deg, #0b1730, #0a1429);
+    }
+    .tank-fill {
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      background:linear-gradient(180deg, rgba(147,197,253,.4), rgba(59,130,246,.85));
+      transition:height .5s ease;
+      min-height:2px;
+    }
+    .tank-value {
+      position:absolute;
+      top:8px;
+      left:6px;
+      right:6px;
+      text-align:center;
+      font-size:12px;
+      color:#dbeafe;
+      text-shadow:0 1px 0 rgba(0,0,0,.5);
+    }
+    .spark {
+      width:100%;
+      height:74px;
+      border:1px solid #1f324a;
+      border-radius:8px;
+      background:#091327;
+    }
+    .meta { display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:12px; color:var(--muted); }
+    .meta strong { color:#dbeafe; font-weight:600; }
+    .empty { color:var(--muted); border:1px dashed #2a4059; border-radius:10px; padding:10px; text-align:center; }
+    @media (max-width: 680px) {
+      .tank-grid { grid-template-columns:74px 1fr; }
+      .tank-vis { height:102px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div>
+        <h1 class="title">Dashboard de Campos e Tanques</h1>
+        <p id="generated-at" class="sub">Carregando...</p>
+      </div>
+      <div class="actions">
+        <div class="legend">
+          <span><i class="dot ok"></i> Online</span>
+          <span><i class="dot warn"></i> Atenção</span>
+          <span><i class="dot err"></i> Atrasado</span>
+        </div>
+        <button id="btn-refresh" class="btn" type="button">Atualizar agora</button>
+        <a class="btn" href="{{ url_for('home') }}">Voltar</a>
+      </div>
+    </header>
+
+    <div id="fields"></div>
+  </div>
+
+<script>
+  const fieldsEl = document.getElementById("fields");
+  const generatedAtEl = document.getElementById("generated-at");
+  const refreshBtn = document.getElementById("btn-refresh");
+
+  function statusLabel(status, minutes) {
+    if (status === "online") return { text: `Online (${minutes} min)`, cls: "ok" };
+    if (status === "atencao") return { text: `Atenção (${minutes} min)`, cls: "warn" };
+    if (status === "atrasado") return { text: `Atrasado (${minutes} min)`, cls: "err" };
+    return { text: "Sem dados", cls: "" };
+  }
+
+  function tankLevelPct(points, latestValue) {
+    const values = (Array.isArray(points) ? points : [])
+      .map((p) => Number(p.medida))
+      .filter((n) => Number.isFinite(n));
+    const lv = Number(latestValue);
+    if (!Number.isFinite(lv)) return 8;
+    if (values.length < 2) return 62;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (max <= min) return 62;
+    const pct = ((lv - min) / (max - min)) * 100;
+    return Math.max(6, Math.min(96, pct));
+  }
+
+  function sparklineSvg(points) {
+    const values = (Array.isArray(points) ? points : [])
+      .map((p) => Number(p.medida))
+      .filter((n) => Number.isFinite(n));
+    const w = 320;
+    const h = 74;
+    if (values.length < 2) {
+      return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><line x1="8" y1="${h/2}" x2="${w-8}" y2="${h/2}" stroke="#355172" stroke-width="2"/></svg>`;
+    }
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = (max - min) || 1;
+    const stepX = (w - 16) / (values.length - 1);
+    const pts = values.map((v, i) => {
+      const x = 8 + (i * stepX);
+      const y = h - 8 - (((v - min) / span) * (h - 16));
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(" ");
+    return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+
+  function renderTankCard(tank) {
+    const latest = tank.latest || null;
+    const measure = latest && Number.isFinite(Number(latest.medida))
+      ? Number(latest.medida).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : "-";
+    const sit = latest && latest.situacao ? latest.situacao : "-";
+    const ts = latest && latest.timestamp ? latest.timestamp : "-";
+    const op = latest && latest.operador ? latest.operador : "-";
+    const badge = statusLabel(tank.status, tank.minutes_since_last);
+    const levelPct = tankLevelPct(tank.points, latest ? latest.medida : null);
+
+    return `
+      <article class="tank-card">
+        <div class="tank-head">
+          <h3 class="tank-name">${tank.tanque_nome}</h3>
+          <span class="pill ${badge.cls}">${badge.text}</span>
+        </div>
+        <div class="tank-grid">
+          <div class="tank-vis">
+            <div class="tank-value">${measure}</div>
+            <div class="tank-fill" style="height:${levelPct.toFixed(1)}%"></div>
+          </div>
+          <div>
+            <div class="spark">${sparklineSvg(tank.points)}</div>
+            <div class="meta">
+              <div><strong>SIT:</strong> ${sit}</div>
+              <div><strong>Ref:</strong> ${tank.sheet_key || tank.tanque_id}</div>
+              <div><strong>Atualizado:</strong> ${ts}</div>
+              <div><strong>Operador:</strong> ${op}</div>
+            </div>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderField(field) {
+    const tanks = Array.isArray(field.tanks) ? field.tanks : [];
+    const online = tanks.filter((t) => t.status === "online").length;
+    const warn = tanks.filter((t) => t.status === "atencao").length;
+    const late = tanks.filter((t) => t.status === "atrasado").length;
+    return `
+      <section class="field">
+        <header class="field-head">
+          <h2 class="field-name">${field.campo_nome}</h2>
+          <p class="sub">Online: ${online} | Atenção: ${warn} | Atrasado: ${late}</p>
+        </header>
+        <div class="tanks">
+          ${tanks.map(renderTankCard).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  async function loadOverview() {
+    try {
+      const resp = await fetch("/api/dashboard/overview?hours=24&points=32");
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.message || "Falha ao carregar dashboard");
+
+      generatedAtEl.textContent = `Atualizado em: ${data.generated_at || "-"} | Janela: ${data.hours_window || 24}h`;
+      const fields = Array.isArray(data.fields) ? data.fields : [];
+      if (!fields.length) {
+        fieldsEl.innerHTML = `<div class="empty">Sem dados para exibir.</div>`;
+        return;
+      }
+      fieldsEl.innerHTML = fields.map(renderField).join("");
+    } catch (err) {
+      fieldsEl.innerHTML = `<div class="empty">${err.message || "Falha ao carregar dashboard."}</div>`;
+    }
+  }
+
+  refreshBtn.addEventListener("click", () => loadOverview());
+  loadOverview();
+  setInterval(loadOverview, 15000);
+</script>
+</body>
+</html>

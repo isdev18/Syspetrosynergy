@@ -25,6 +25,11 @@ function doGet() {
 function doPost(e) {
   try {
     var payload = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    var action = String(payload.action || "append").toLowerCase();
+
+    if (action === "delete") {
+      return handleDelete(payload);
+    }
 
     var required = ["hora", "medida", "situacao"];
     for (var i = 0; i < required.length; i++) {
@@ -90,6 +95,62 @@ function doPost(e) {
   }
 }
 
+function handleDelete(payload) {
+  var required = ["boletim_data_ref", "hora"];
+  for (var i = 0; i < required.length; i++) {
+    var key = required[i];
+    if (payload[key] === undefined || payload[key] === null || payload[key] === "") {
+      return jsonOut({ ok: false, error: "Campo obrigatorio para exclusao: " + key });
+    }
+  }
+
+  var tankKey = resolveTankKey(payload);
+  if (!tankKey || !TANK_COLUMN_MAP[tankKey]) {
+    return jsonOut({ ok: false, error: "Tanque sem mapeamento: " + (tankKey || "(vazio)") });
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ws = ss.getSheetByName(TARGET_SHEET);
+  if (!ws) {
+    return jsonOut({ ok: false, error: "Aba BOLETIM BA nao encontrada" });
+  }
+
+  var colMap = TANK_COLUMN_MAP[tankKey];
+  var horaCol = colToIndex(colMap.hora);
+  var medidaCol = colToIndex(colMap.medida);
+  var sitCol = colToIndex(colMap.sit);
+  var window = resolveBoletimWindow(ws, payload.boletim_data_ref, horaCol);
+  if (!window.ok) {
+    return jsonOut({ ok: false, error: window.error });
+  }
+
+  var targetRow = resolveDeleteRow(
+    ws,
+    horaCol,
+    medidaCol,
+    sitCol,
+    window.startRow,
+    window.endRow,
+    payload
+  );
+  if (!targetRow) {
+    return jsonOut({ ok: false, error: "Registro nao encontrado na planilha para exclusao" });
+  }
+
+  ws.getRange(targetRow, horaCol).clearContent();
+  ws.getRange(targetRow, medidaCol).clearContent();
+  ws.getRange(targetRow, sitCol).clearContent();
+
+  return jsonOut({
+    ok: true,
+    action: "delete",
+    sheet: ws.getName(),
+    row: targetRow,
+    tanque: tankKey,
+    columns: colMap
+  });
+}
+
 function resolveTankKey(payload) {
   var raw = String(payload.tanque_sheet_key || payload.tanque_id || payload.tanque_nome || "").toUpperCase();
   var match = raw.match(/TP-\d+-\d+/);
@@ -114,6 +175,22 @@ function findFirstEmptyRow(ws, colIndex, startRow, endRow) {
 function resolveTargetRow(ws, horaCol, medidaCol, horaValue, startRow, endRow) {
   var firstEmpty = findFirstEmptyRow(ws, horaCol, startRow, endRow);
   var normalizedInputHour = normalizeHourValue(horaValue);
+
+  // Quando o quadro ja tem as horas pre-preenchidas, gravamos na linha da hora
+  // cuja coluna de medida ainda esta vazia.
+  var hourRows = findRowsByHour(ws, horaCol, startRow, endRow, normalizedInputHour);
+  if (hourRows.length > 0) {
+    var lastRowByRange = Math.max(ws.getLastRow(), startRow);
+    var finalRowByRange = Math.max(startRow, Math.min(endRow || lastRowByRange, lastRowByRange));
+    var heightByRange = Math.max(finalRowByRange - startRow + 1, 1);
+    var measureValuesByRange = ws.getRange(startRow, medidaCol, heightByRange, 1).getValues();
+    for (var h = 0; h < hourRows.length; h++) {
+      if (isMeasureCellEmpty(measureValuesByRange, hourRows[h], startRow)) {
+        return { row: hourRows[h], isClosing: false };
+      }
+    }
+  }
+
   if (normalizedInputHour !== "12:00") {
     return { row: firstEmpty, isClosing: false };
   }
@@ -144,6 +221,98 @@ function resolveTargetRow(ws, horaCol, medidaCol, horaValue, startRow, endRow) {
   }
 
   return { row: firstEmpty, isClosing: false };
+}
+
+function resolveDeleteRow(ws, horaCol, medidaCol, sitCol, startRow, endRow, payload) {
+  var lastRow = Math.max(ws.getLastRow(), startRow);
+  var finalRow = Math.max(startRow, Math.min(endRow || lastRow, lastRow));
+  var height = Math.max(finalRow - startRow + 1, 1);
+
+  var horaValues = ws.getRange(startRow, horaCol, height, 1).getValues();
+  var medidaValues = ws.getRange(startRow, medidaCol, height, 1).getValues();
+  var sitValues = ws.getRange(startRow, sitCol, height, 1).getValues();
+
+  var inputHour = normalizeHourValue(payload.hora);
+  var inputMeasure = toNumeric(payload.medida);
+  var inputSit = String(payload.situacao || "").trim();
+  var inputSitNorm = inputSit ? normalizeSituacao(inputSit) : "";
+
+  var candidates = [];
+  for (var i = 0; i < horaValues.length; i++) {
+    var rowHour = normalizeHourValue(horaValues[i][0]);
+    if (rowHour !== inputHour) {
+      continue;
+    }
+
+    var rowMeasure = toNumeric(medidaValues[i][0]);
+    var score = 0;
+    if (inputMeasure !== null && rowMeasure !== null) {
+      var diff = Math.abs(rowMeasure - inputMeasure);
+      if (diff <= 0.0001) {
+        score += 4;
+      } else if (diff <= 0.1) {
+        score += 3;
+      } else if (diff <= 1) {
+        score += 2;
+      } else {
+        score += 1;
+      }
+    } else if (rowMeasure !== null) {
+      score += 1;
+    }
+
+    var rowSit = String(sitValues[i][0] || "").trim();
+    var rowSitNorm = rowSit ? normalizeSituacao(rowSit) : "";
+    if (inputSitNorm && rowSitNorm === inputSitNorm) {
+      score += 1;
+    }
+
+    candidates.push({ row: startRow + i, score: score });
+  }
+
+  if (candidates.length === 0) {
+    // Fallback: se nao bateu hora (formato diferente na planilha),
+    // tenta por medida/situacao nas linhas preenchidas da janela.
+    for (var j = 0; j < medidaValues.length; j++) {
+      var rowMeasureFallback = toNumeric(medidaValues[j][0]);
+      if (rowMeasureFallback === null) {
+        continue;
+      }
+      var fallbackScore = 0;
+      if (inputMeasure !== null) {
+        var diffFallback = Math.abs(rowMeasureFallback - inputMeasure);
+        if (diffFallback <= 0.0001) {
+          fallbackScore += 3;
+        } else if (diffFallback <= 0.1) {
+          fallbackScore += 2;
+        } else if (diffFallback <= 1) {
+          fallbackScore += 1;
+        }
+      } else {
+        fallbackScore += 1;
+      }
+
+      var rowSitFallback = String(sitValues[j][0] || "").trim();
+      var rowSitFallbackNorm = rowSitFallback ? normalizeSituacao(rowSitFallback) : "";
+      if (inputSitNorm && rowSitFallbackNorm === inputSitNorm) {
+        fallbackScore += 1;
+      }
+      if (fallbackScore > 0) {
+        candidates.push({ row: startRow + j, score: fallbackScore });
+      }
+    }
+    if (candidates.length === 0) {
+      return null;
+    }
+  }
+
+  candidates.sort(function (a, b) {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    return b.row - a.row;
+  });
+  return candidates[0].row;
 }
 
 function isMeasureCellEmpty(medidaValues, rowNumber, startRow) {
@@ -327,6 +496,18 @@ function normalizeHourValue(value) {
     return text;
   }
   return String(Number(match[1])).padStart(2, "0") + ":" + match[2];
+}
+
+function toNumeric(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  if (typeof value === "number" && isFinite(value)) {
+    return value;
+  }
+  var text = String(value).trim().replace(",", ".");
+  var num = Number(text);
+  return isFinite(num) ? num : null;
 }
 
 function colToIndex(col) {

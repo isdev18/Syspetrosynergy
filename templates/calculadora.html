@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SysPetro - Calculadora</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --line:#334155; --text:#e5e7eb; --accent:#1d4ed8; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; font-family:Segoe UI, sans-serif; color:var(--text);
+      background: radial-gradient(circle at 15% 10%, rgba(180,83,9,.2), transparent 35%), linear-gradient(135deg, #020617, var(--bg));
+      padding:16px; }
+    .wrap { max-width:820px; margin:0 auto; }
+    .bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:10px; }
+    .brand { font-size:26px; margin:0; }
+    .sub { margin:2px 0 0; color:#cbd5e1; font-size:14px; }
+    .btn { border:1px solid var(--line); background:transparent; color:white; border-radius:10px; padding:8px 12px; text-decoration:none; display:inline-flex; align-items:center; gap:8px; }
+    .card { background:rgba(17,24,39,.9); border:1px solid var(--line); border-radius:16px; padding:18px; }
+    .grid { display:grid; gap:10px; }
+    .row2 { display:grid; gap:10px; }
+    label { font-size:14px; color:#cbd5e1; }
+    input { width:100%; border:1px solid var(--line); border-radius:10px; background:#0b1220; color:white; padding:12px; }
+    .calc-results { margin-top:10px; border:1px solid #1f3a5c; border-radius:10px; padding:10px; background:rgba(11,18,32,.6); display:grid; gap:6px; }
+    .calc-line { font-size:14px; color:#cbd5e1; }
+    .calc-line strong { color:#bfdbfe; }
+    @media (min-width: 760px) { .row2 { grid-template-columns:1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="bar">
+      <div>
+        <h1 class="brand">Calculadora de Volume</h1>
+        <p class="sub">Operador: {{ user_name }}</p>
+      </div>
+      <a class="btn" href="{{ url_for('home') }}">Voltar</a>
+    </header>
+
+    <section class="card">
+      <div class="grid">
+        <div class="row2">
+          <div>
+            <label for="trena_inicial">Valor da trena inicial (cm)</label>
+            <input id="trena_inicial" type="number" step="0.01" placeholder="0.00" />
+          </div>
+          <div>
+            <label for="trena_final">Valor da trena final (cm)</label>
+            <input id="trena_final" type="number" step="0.01" placeholder="0.00" />
+          </div>
+        </div>
+        <div class="row2">
+          <div>
+            <label for="constante_tanque">Constante do tanque</label>
+            <input id="constante_tanque" type="number" step="0.0001" placeholder="0.0000" />
+          </div>
+          <div>
+            <label for="horas_operacionais">Horas operacionais</label>
+            <input id="horas_operacionais" type="number" step="0.01" min="0.01" placeholder="0.00" />
+          </div>
+        </div>
+      </div>
+      <div class="calc-results">
+        <div class="calc-line"><strong>X (cm):</strong> <span id="calc_x">0,00</span></div>
+        <div class="calc-line"><strong>Y (m³):</strong> <span id="calc_y">0,0000</span></div>
+        <div class="calc-line"><strong>Z (m³/h):</strong> <span id="calc_z">0,0000</span></div>
+        <div class="calc-line"><strong>Volume em 24h (m³):</strong> <span id="calc_24h">0,0000</span></div>
+      </div>
+    </section>
+  </div>
+
+<script>
+  const trenaInicialInput = document.getElementById("trena_inicial");
+  const trenaFinalInput = document.getElementById("trena_final");
+  const constanteTanqueInput = document.getElementById("constante_tanque");
+  const horasOperacionaisInput = document.getElementById("horas_operacionais");
+  const calcXOutput = document.getElementById("calc_x");
+  const calcYOutput = document.getElementById("calc_y");
+  const calcZOutput = document.getElementById("calc_z");
+  const calc24hOutput = document.getElementById("calc_24h");
+
+  function parsePositiveNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function parseNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function formatNumber(value, decimals) {
+    if (!Number.isFinite(value)) return "0";
+    return value.toLocaleString("pt-BR", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+  }
+
+  function updateCalculator() {
+    const trenaInicial = parseNumber(trenaInicialInput.value);
+    const trenaFinal = parseNumber(trenaFinalInput.value);
+    const constante = parseNumber(constanteTanqueInput.value);
+    const horas = parsePositiveNumber(horasOperacionaisInput.value);
+
+    const x = trenaInicial !== null && trenaFinal !== null ? (trenaInicial - trenaFinal) : 0;
+    const y = Number.isFinite(x) && constante !== null ? (x * constante) : 0;
+    const z = Number.isFinite(y) && horas !== null ? (y / horas) : 0;
+    const volume24h = Number.isFinite(z) ? (z * 24) : 0;
+
+    calcXOutput.textContent = formatNumber(x, 2);
+    calcYOutput.textContent = formatNumber(y, 4);
+    calcZOutput.textContent = formatNumber(z, 4);
+    calc24hOutput.textContent = formatNumber(volume24h, 4);
+  }
+
+  [trenaInicialInput, trenaFinalInput, constanteTanqueInput, horasOperacionaisInput].forEach((el) => {
+    el.addEventListener("input", updateCalculator);
+  });
+  updateCalculator();
+</script>
+</body>
+</html>
